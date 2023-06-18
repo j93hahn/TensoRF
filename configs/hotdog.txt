@@ -1,7 +1,7 @@
 
 dataset_name = blender
-datadir = /share/data/pals/jjahn/data/blender/lego
-expname =  tensorf_lego_VM
+datadir = /share/data/pals/jjahn/data/blender/hotdog
+expname =  tensorf_hotdog_VM
 basedir = ./log
 
 n_iters = 30000

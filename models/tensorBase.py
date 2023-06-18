@@ -2,18 +2,20 @@ import torch
 import torch.nn
 import torch.nn.functional as F
 from .sh import eval_sh_bases
+from .trunc_exp import trunc_exp
 import numpy as np
 import time
 
 
 def positional_encoding(positions, freqs):
-    
-        freq_bands = (2**torch.arange(freqs).float()).to(positions.device)  # (F,)
-        pts = (positions[..., None] * freq_bands).reshape(
-            positions.shape[:-1] + (freqs * positions.shape[-1], ))  # (..., DF)
-        pts = torch.cat([torch.sin(pts), torch.cos(pts)], dim=-1)
-        return pts
+    freq_bands = (2**torch.arange(freqs).float()).to(positions.device)  # (F,)
+    pts = (positions[..., None] * freq_bands).reshape(
+        positions.shape[:-1] + (freqs * positions.shape[-1], ))  # (..., DF)
+    pts = torch.cat([torch.sin(pts), torch.cos(pts)], dim=-1)
+    return pts
 
+
+# compute the alpha and weights for the volume rendering
 def raw2alpha(sigma, dist):
     # sigma, dist  [N_rays, N_samples]
     alpha = 1. - torch.exp(-sigma*dist)
@@ -32,9 +34,9 @@ def SHRender(xyz_sampled, viewdirs, features):
 
 
 def RGBRender(xyz_sampled, viewdirs, features):
-
     rgb = features
     return rgb
+
 
 class AlphaGridMask(torch.nn.Module):
     def __init__(self, device, aabb, alpha_volume):
@@ -83,6 +85,7 @@ class MLPRender_Fea(torch.nn.Module):
 
         return rgb
 
+
 class MLPRender_PE(torch.nn.Module):
     def __init__(self,inChanel, viewpe=6, pospe=6, featureC=128):
         super(MLPRender_PE, self).__init__()
@@ -109,13 +112,14 @@ class MLPRender_PE(torch.nn.Module):
 
         return rgb
 
+
 class MLPRender(torch.nn.Module):
     def __init__(self,inChanel, viewpe=6, featureC=128):
         super(MLPRender, self).__init__()
 
         self.in_mlpC = (3+2*viewpe*3) + inChanel
         self.viewpe = viewpe
-        
+
         layer1 = torch.nn.Linear(self.in_mlpC, featureC)
         layer2 = torch.nn.Linear(featureC, featureC)
         layer3 = torch.nn.Linear(featureC,3)
@@ -132,7 +136,6 @@ class MLPRender(torch.nn.Module):
         rgb = torch.sigmoid(rgb)
 
         return rgb
-
 
 
 class TensorBase(torch.nn.Module):
@@ -152,7 +155,7 @@ class TensorBase(torch.nn.Module):
 
         self.density_shift = density_shift
         self.alphaMask_thres = alphaMask_thres
-        self.distance_scale = distance_scale
+        self.distance_scale = distance_scale            # distance scaling factor
         self.rayMarch_weight_thres = rayMarch_weight_thres
         self.fea2denseAct = fea2denseAct
 
@@ -208,13 +211,13 @@ class TensorBase(torch.nn.Module):
 
     def compute_features(self, xyz_sampled):
         pass
-    
+
     def compute_densityfeature(self, xyz_sampled):
         pass
-    
+
     def compute_appfeature(self, xyz_sampled):
         pass
-    
+
     def normalize_coord(self, xyz_sampled):
         return (xyz_sampled-self.aabb[0]) * self.invaabbSize - 1
 
@@ -262,7 +265,6 @@ class TensorBase(torch.nn.Module):
             self.alphaMask = AlphaGridMask(self.device, ckpt['alphaMask.aabb'].to(self.device), alpha_volume.float().to(self.device))
         self.load_state_dict(ckpt['state_dict'])
 
-
     def sample_ray_ndc(self, rays_o, rays_d, is_train=True, N_samples=-1):
         N_samples = N_samples if N_samples > 0 else self.nSamples
         near, far = self.near_far
@@ -294,7 +296,6 @@ class TensorBase(torch.nn.Module):
         mask_outbbox = ((self.aabb[0]>rays_pts) | (rays_pts>self.aabb[1])).any(dim=-1)
 
         return rays_pts, interpx, ~mask_outbbox
-
 
     def shrink(self, new_aabb, voxel_size):
         pass
@@ -375,22 +376,27 @@ class TensorBase(torch.nn.Module):
         print(f'Ray filtering done! takes {time.time()-tt} s. ray mask ratio: {torch.sum(mask_filtered) / N}')
         return all_rays[mask_filtered], all_rgbs[mask_filtered]
 
-
     def feature2density(self, density_features):
         if self.fea2denseAct == "softplus":
-            return F.softplus(density_features+self.density_shift)
+            return F.softplus(density_features)
         elif self.fea2denseAct == "relu":
             return F.relu(density_features)
+        elif self.fea2denseAct == "sigmoid":
+            return torch.sigmoid(density_features)
+        elif self.fea2denseAct == 'trunc_exp':
+            return trunc_exp(density_features)
+        elif self.fea2denseAct == 'exp':
+            return torch.exp(density_features)
+        else:
+            raise NotImplementedError
 
-
-    def compute_alpha(self, xyz_locs, length=1):
-
+    def compute_alpha(self, xyz_locs, length=1, extract_sigma=False):
         if self.alphaMask is not None:
             alphas = self.alphaMask.sample_alpha(xyz_locs)
             alpha_mask = alphas > 0
         else:
             alpha_mask = torch.ones_like(xyz_locs[:,0], dtype=bool)
-            
+
 
         sigma = torch.zeros(xyz_locs.shape[:-1], device=xyz_locs.device)
 
@@ -399,15 +405,15 @@ class TensorBase(torch.nn.Module):
             sigma_feature = self.compute_densityfeature(xyz_sampled)
             validsigma = self.feature2density(sigma_feature)
             sigma[alpha_mask] = validsigma
-        
 
-        alpha = 1 - torch.exp(-sigma*length).view(xyz_locs.shape[:-1])
+        if extract_sigma:   # only for Alpha Invariance - evaluate densities
+            return sigma
+
+        alpha = 1. - torch.exp(-sigma*length).view(xyz_locs.shape[:-1])
 
         return alpha
 
-
     def forward(self, rays_chunk, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1):
-
         # sample points
         viewdirs = rays_chunk[:, 3:6]
         if ndc_ray:
@@ -420,7 +426,7 @@ class TensorBase(torch.nn.Module):
             xyz_sampled, z_vals, ray_valid = self.sample_ray(rays_chunk[:, :3], viewdirs, is_train=is_train,N_samples=N_samples)
             dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
         viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
-        
+
         if self.alphaMask is not None:
             alphas = self.alphaMask.sample_alpha(xyz_sampled[ray_valid])
             alpha_mask = alphas > 0
@@ -455,12 +461,11 @@ class TensorBase(torch.nn.Module):
         if white_bg or (is_train and torch.rand((1,))<0.5):
             rgb_map = rgb_map + (1. - acc_map[..., None])
 
-        
+
         rgb_map = rgb_map.clamp(0,1)
 
         with torch.no_grad():
             depth_map = torch.sum(weight * z_vals, -1)
             depth_map = depth_map + (1. - acc_map) * rays_chunk[..., -1]
 
-        return rgb_map, depth_map # rgb, sigma, alpha, weight, bg_weight
-
+        return rgb_map, depth_map, alpha # rgb, sigma, alpha, weight, bg_weight

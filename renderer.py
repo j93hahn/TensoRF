@@ -12,13 +12,15 @@ def OctreeRender_trilinear_fast(rays, tensorf, chunk=4096, N_samples=-1, ndc_ray
     N_rays_all = rays.shape[0]
     for chunk_idx in range(N_rays_all // chunk + int(N_rays_all % chunk > 0)):
         rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
-    
-        rgb_map, depth_map = tensorf(rays_chunk, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, N_samples=N_samples)
+
+        rgb_map, depth_map, alpha = tensorf(rays_chunk, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, N_samples=N_samples)
 
         rgbs.append(rgb_map)
         depth_maps.append(depth_map)
-    
-    return torch.cat(rgbs), None, torch.cat(depth_maps), None, None
+        alphas.append(alpha)
+
+    return torch.cat(rgbs), torch.cat(alphas), torch.cat(depth_maps), None, None
+
 
 @torch.no_grad()
 def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prtx='', N_samples=-1,
@@ -86,6 +88,7 @@ def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prt
 
     return PSNRs
 
+
 @torch.no_grad()
 def evaluation_path(test_dataset,tensorf, c2ws, renderer, savePath=None, N_vis=5, prtx='', N_samples=-1,
                     white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
@@ -142,4 +145,3 @@ def evaluation_path(test_dataset,tensorf, c2ws, renderer, savePath=None, N_vis=5
 
 
     return PSNRs
-

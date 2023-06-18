@@ -378,7 +378,7 @@ class TensorBase(torch.nn.Module):
 
     def feature2density(self, density_features):
         if self.fea2denseAct == "softplus":
-            return F.softplus(density_features)
+            return F.softplus(density_features+self.density_shift)
         elif self.fea2denseAct == "relu":
             return F.relu(density_features)
         elif self.fea2denseAct == "sigmoid":

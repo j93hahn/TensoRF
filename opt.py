@@ -1,5 +1,7 @@
 import configargparse
 
+# https://github.com/apchenstu/TensoRF
+
 def config_parser(cmd=None):
     parser = configargparse.ArgumentParser()
     parser.add_argument('--config', is_config_file=True,
@@ -33,7 +35,7 @@ def config_parser(cmd=None):
     # training options
     # learning rate
     parser.add_argument("--lr_init", type=float, default=0.02,
-                        help='learning rate')    
+                        help='learning rate')
     parser.add_argument("--lr_basis", type=float, default=1e-3,
                         help='learning rate')
     parser.add_argument("--lr_decay_iters", type=int, default=-1,
@@ -54,7 +56,7 @@ def config_parser(cmd=None):
                         help='loss weight')
     parser.add_argument("--TV_weight_app", type=float, default=0.0,
                         help='loss weight')
-    
+
     # model
     # volume options
     parser.add_argument("--n_lamb_sigma", type=int, action="append")
@@ -65,11 +67,11 @@ def config_parser(cmd=None):
                         help='mask points in ray marching')
     parser.add_argument("--alpha_mask_thre", type=float, default=0.0001,
                         help='threshold for creating alpha mask volume')
-    parser.add_argument("--distance_scale", type=float, default=25,
+    parser.add_argument("--distance_scale", type=float, default=25,         # apply k factorization here
                         help='scaling sampling distance for computation')
     parser.add_argument("--density_shift", type=float, default=-10,
                         help='shift density in softplus; making density = 0  when feature == 0')
-                        
+
     # network decoder
     parser.add_argument("--shadingMode", type=str, default="MLP_PE",
                         help='which shading mode to use')
@@ -81,8 +83,6 @@ def config_parser(cmd=None):
                         help='number of pe for features')
     parser.add_argument("--featureC", type=int, default=128,
                         help='hidden feature channel in MLP')
-    
-
 
     parser.add_argument("--ckpt", type=str, default=None,
                         help='specific weights npy file to reload for coarse network')
@@ -98,7 +98,7 @@ def config_parser(cmd=None):
     parser.add_argument("--perturb", type=float, default=1.,
                         help='set to 0. for no jitter, 1. for jitter')
     parser.add_argument("--accumulate_decay", type=float, default=0.998)
-    parser.add_argument("--fea2denseAct", type=str, default='softplus')
+    parser.add_argument("--fea2denseAct", type=str, default='softplus') # activation function on sigmas outputed by neural network
     parser.add_argument('--ndc_ray', type=int, default=0)
     parser.add_argument('--nSamples', type=int, default=1e6,
                         help='sample point each ray, pass 1e6 if automatic adjust')
@@ -108,8 +108,6 @@ def config_parser(cmd=None):
     ## blender flags
     parser.add_argument("--white_bkgd", action='store_true',
                         help='set to render synthetic data on a white bkgd (always use for dvoxels)')
-
-
 
     parser.add_argument('--N_voxel_init',
                         type=int,

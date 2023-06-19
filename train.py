@@ -69,6 +69,11 @@ def render_test(args):
     tensorf.load(ckpt)
 
     logfolder = os.path.dirname(args.ckpt)
+
+    if args.render_sigma_distribution:
+        extract_sigma_distribution(tensorf)
+        return
+
     if args.render_train:
         os.makedirs(f'{logfolder}/imgs_train_all', exist_ok=True)
         train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True)
@@ -281,20 +286,8 @@ def reconstruction(args):
     # save model for future usage
     tensorf.save(f'{logfolder}/{args.expname}.th')
 
-    # extract sigma values for density visualization in Alpha Invariance
-    gridSize = [200, 200, 200] # can be [128, 128, 128] or [300, 300, 300]
-    gridSamples = torch.stack(
-        torch.meshgrid(
-            torch.linspace(-1.5, 1.5, gridSize[0]),
-            torch.linspace(-1.5, 1.5, gridSize[1]),
-            torch.linspace(-1.5, 1.5, gridSize[2]),
-        ), -1
-    ).reshape(-1, 3).to(tensorf.device)
-
-    sigmas = tensorf.compute_alpha(gridSamples, extract_sigma=True)
-    np.save('sigmas.npy', sigmas.reshape(gridSize[0],
-                                         gridSize[1],
-                                         gridSize[2]).cpu().detach().numpy())
+    # extract sigma distribution using fully trained model
+    extract_sigma_distribution(tensorf)
 
     if args.render_train:
         os.makedirs(f'{logfolder}/imgs_train_all', exist_ok=True)

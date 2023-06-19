@@ -22,6 +22,24 @@ def OctreeRender_trilinear_fast(rays, tensorf, chunk=4096, N_samples=-1, ndc_ray
     return torch.cat(rgbs), torch.cat(alphas), torch.cat(depth_maps), None, None
 
 
+# extract sigma values for density visualization in Alpha Invariance
+def extract_sigma_distribution(tensorf):
+    # first, generate grid samples using SceneBox
+    gridSize = [200, 200, 200] # can be [128, 128, 128] or [300, 300, 300]
+    gridSamples = torch.stack(
+        torch.meshgrid(
+            torch.linspace(-1.5, 1.5, gridSize[0]),
+            torch.linspace(-1.5, 1.5, gridSize[1]),
+            torch.linspace(-1.5, 1.5, gridSize[2]),
+        ), -1
+    ).reshape(-1, 3).to(tensorf.device)
+
+    sigmas = tensorf.compute_alpha(gridSamples, extract_sigma=True)
+    np.save('sigmas.npy', sigmas.reshape(gridSize[0],
+                                         gridSize[1],
+                                         gridSize[2]).cpu().detach().numpy())
+
+
 @torch.no_grad()
 def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prtx='', N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):

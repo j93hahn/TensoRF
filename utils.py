@@ -2,7 +2,9 @@ import cv2,torch
 import numpy as np
 from PIL import Image
 import torchvision.transforms as T
-import torch.nn.functional as F
+import torch.nn as nn
+import plyfile
+import skimage.measure
 import scipy.signal
 
 mse2psnr = lambda x : -10. * torch.log(x) / torch.log(torch.Tensor([10.]))
@@ -25,10 +27,12 @@ def visualize_depth_numpy(depth, minmax=None, cmap=cv2.COLORMAP_JET):
     x_ = cv2.applyColorMap(x, cmap)
     return x_, [mi,ma]
 
+
 def init_log(log, keys):
     for key in keys:
         log[key] = torch.tensor([0.0], dtype=float)
     return log
+
 
 def visualize_depth(depth, minmax=None, cmap=cv2.COLORMAP_JET):
     """
@@ -50,16 +54,16 @@ def visualize_depth(depth, minmax=None, cmap=cv2.COLORMAP_JET):
     x_ = T.ToTensor()(x_)  # (3, H, W)
     return x_, [mi,ma]
 
+
 def N_to_reso(n_voxels, bbox):
     xyz_min, xyz_max = bbox
     dim = len(xyz_min)
     voxel_size = ((xyz_max - xyz_min).prod() / n_voxels).pow(1 / dim)
     return ((xyz_max - xyz_min) / voxel_size).long().tolist()
 
+
 def cal_n_samples(reso, step_ratio=0.5):
     return int(np.linalg.norm(reso)/step_ratio)
-
-
 
 
 __LPIPS__ = {}
@@ -68,6 +72,7 @@ def init_lpips(net_name, device):
     import lpips
     print(f'init_lpips: lpips_{net_name}')
     return lpips.LPIPS(net=net_name, version='0.1').eval().to(device)
+
 
 def rgb_lpips(np_gt, np_im, net_name, device):
     if net_name not in __LPIPS__:
@@ -84,8 +89,6 @@ def findItem(items, target):
     return None
 
 
-''' Evaluation metrics (ssim, lpips)
-'''
 def rgb_ssim(img0, img1, max_val,
              filter_size=11,
              filter_sigma=1.5,
@@ -135,7 +138,6 @@ def rgb_ssim(img0, img1, max_val,
     return ssim_map if return_map else ssim
 
 
-import torch.nn as nn
 class TVLoss(nn.Module):
     def __init__(self,TVLoss_weight=1):
         super(TVLoss,self).__init__()
@@ -155,9 +157,6 @@ class TVLoss(nn.Module):
         return t.size()[1]*t.size()[2]*t.size()[3]
 
 
-
-import plyfile
-import skimage.measure
 def convert_sdf_samples_to_ply(
     pytorch_3d_sdf_tensor,
     ply_filename_out,

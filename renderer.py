@@ -23,7 +23,7 @@ def OctreeRender_trilinear_fast(rays, tensorf, chunk=4096, N_samples=-1, ndc_ray
 
 
 # extract sigma values for density visualization in Alpha Invariance
-def extract_sigma_distribution(tensorf):
+def extract_sigma_from_scene_box(tensorf):
     # first, generate grid samples using SceneBox
     gridSize = [200, 200, 200]
     gridSamples = torch.stack(

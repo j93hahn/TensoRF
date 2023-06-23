@@ -104,6 +104,7 @@ def config_parser(cmd=None):
     parser.add_argument('--nSamples', type=int, default=1e6,
                         help='sample point each ray, pass 1e6 if automatic adjust')
     parser.add_argument('--step_ratio',type=float,default=0.5)
+    parser.add_argument('--render_sigma_test_pose', type=int, default=-1)
 
 
     ## blender flags

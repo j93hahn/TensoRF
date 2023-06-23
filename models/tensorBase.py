@@ -468,4 +468,4 @@ class TensorBase(torch.nn.Module):
             depth_map = torch.sum(weight * z_vals, -1)
             depth_map = depth_map + (1. - acc_map) * rays_chunk[..., -1]
 
-        return rgb_map, depth_map, alpha # rgb, sigma, alpha, weight, bg_weight
+        return rgb_map, depth_map, alpha, weight, sigma

@@ -2,7 +2,6 @@ import numpy as np
 import torch
 
 import matplotlib.pyplot as plt
-from mpl_toolkits import mplot3d
 
 
 """
@@ -168,11 +167,27 @@ if __name__ == "__main__":
                                                                   viz_hist=True)
 
     # compute 50th percentile of weights histogram for all rays in the batch
-    _idxs, _, _xyz_locs = compute_weight_histograms_of_multiple_rays(weights, xyz_samples)
+    _, _, _xyz_locs = compute_weight_histograms_of_multiple_rays(weights, xyz_samples)
 
     # visualize xyz locations
+    sigma_vals = np.load('sigmas_new.npy')
+    mask = (sigma_vals == 0)    # mask out the rays that passed through empty space
+    colors = sigma_vals[~mask]
+    xyz_locs = _xyz_locs[~mask]
+
+    # visualize the xyz locations of the 50th percentile of the weights histogram
+    # colorcoded with the sigma values using matplotlib
     fig = plt.figure()
     ax = plt.axes(projection='3d')
-    ax.scatter3D(_xyz_locs[:,0], _xyz_locs[:,1], _xyz_locs[:,2], c=_xyz_locs[:,2], cmap='Greens')
+    ax.scatter3D(xyz_locs[:,0], xyz_locs[:,1], xyz_locs[:,2], c=colors, cmap='magma')
     plt.show()
     plt.close()
+
+    # visualize the xyz locations of the 50th percentile of the weights histogram
+    # colorcoded with the sigma values using open3d - not supported on Mac Apple Silicon
+    import open3d as o3d
+    _colors = np.random.uniform(0, 1, size=(xyz_locs.shape[0], 3))
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(_xyz_locs.astype(int))
+    pcd.colors = o3d.utility.Vector3dVector(_colors)
+    o3d.visualization.draw_geometries([pcd])

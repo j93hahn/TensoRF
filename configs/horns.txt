@@ -1,7 +1,7 @@
 
 dataset_name = llff
-datadir = /share/data/pals/jjahn/data/llff/flower
-expname =  tensorf_flower_VM
+datadir = /share/data/pals/jjahn/data/llff/horns
+expname =  tensorf_horns_VM
 basedir = ./log
 
 downsample_train = 4.0

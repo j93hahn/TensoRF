@@ -13,7 +13,7 @@ def OctreeRender_trilinear_fast(rays, tensorf, chunk=4096, N_samples=-1, ndc_ray
     for chunk_idx in range(N_rays_all // chunk + int(N_rays_all % chunk > 0)):
         rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
 
-        rgb_map, depth_map, alpha, _, _ = tensorf(rays_chunk, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, N_samples=N_samples)
+        rgb_map, depth_map, alpha, _, _, _ = tensorf(rays_chunk, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, N_samples=N_samples)
 
         rgbs.append(rgb_map)
         depth_maps.append(depth_map)
@@ -34,7 +34,7 @@ def extract_sigma_from_grid_box(tensorf):
         ), -1
     ).reshape(-1, 3).to(tensorf.device)
 
-    sigmas = tensorf.compute_alpha(gridSamples, extract_sigma=True)
+    sigmas = tensorf.compute_sigma(gridSamples)
     np.save('sigmas.npy', sigmas.reshape(gridSize[0],
                                          gridSize[1],
                                          gridSize[2]).cpu().detach().numpy())

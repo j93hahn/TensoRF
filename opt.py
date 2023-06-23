@@ -90,7 +90,7 @@ def config_parser(cmd=None):
     parser.add_argument("--render_test", type=int, default=0)
     parser.add_argument("--render_train", type=int, default=0)
     parser.add_argument("--render_path", type=int, default=0)
-    parser.add_argument("--render_sigma_distribution", type=int, default=0)
+    parser.add_argument("--render_grid_box_sigma", type=int, default=0)
     parser.add_argument("--export_mesh", type=int, default=0)
 
     # rendering options

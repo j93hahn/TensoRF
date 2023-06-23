@@ -390,13 +390,12 @@ class TensorBase(torch.nn.Module):
         else:
             raise NotImplementedError
 
-    def compute_alpha(self, xyz_locs, length=1, extract_sigma=False):
+    def compute_alpha(self, xyz_locs, length=1):
         if self.alphaMask is not None:
             alphas = self.alphaMask.sample_alpha(xyz_locs)
             alpha_mask = alphas > 0
         else:
             alpha_mask = torch.ones_like(xyz_locs[:,0], dtype=bool)
-
 
         sigma = torch.zeros(xyz_locs.shape[:-1], device=xyz_locs.device)
 
@@ -406,12 +405,26 @@ class TensorBase(torch.nn.Module):
             validsigma = self.feature2density(sigma_feature)
             sigma[alpha_mask] = validsigma
 
-        if extract_sigma:   # only for Alpha Invariance - evaluate densities
-            return sigma
-
         alpha = 1. - torch.exp(-sigma*length).view(xyz_locs.shape[:-1])
-
         return alpha
+
+    # method that imitates compute_alpha() but returns the sigma values instead
+    def compute_sigma(self, xyz_locs):
+        if self.alphaMask is not None:
+            alphas = self.alphaMask.sample_alpha(xyz_locs)
+            alpha_mask = alphas > 0
+        else:
+            alpha_mask = torch.ones_like(xyz_locs[:,0], dtype=bool)
+
+        sigma = torch.zeros(xyz_locs.shape[:-1], device=xyz_locs.device)
+
+        if alpha_mask.any():
+            xyz_sampled = self.normalize_coord(xyz_locs[alpha_mask])
+            sigma_feature = self.compute_densityfeature(xyz_sampled)
+            validsigma = self.feature2density(sigma_feature)
+            sigma[alpha_mask] = validsigma
+
+        return sigma
 
     def forward(self, rays_chunk, white_bg=True, is_train=False, ndc_ray=False, N_samples=-1):
         # sample points
@@ -468,4 +481,4 @@ class TensorBase(torch.nn.Module):
             depth_map = torch.sum(weight * z_vals, -1)
             depth_map = depth_map + (1. - acc_map) * rays_chunk[..., -1]
 
-        return rgb_map, depth_map, alpha, weight, sigma
+        return rgb_map, depth_map, alpha, weight, sigma, xyz_sampled

@@ -70,10 +70,6 @@ def render_test(args):
 
     logfolder = os.path.dirname(args.ckpt)
 
-    if args.render_grid_box_sigma:
-        extract_sigma_from_grid_box(tensorf)
-        return
-
     if args.render_train:
         os.makedirs(f'{logfolder}/imgs_train_all', exist_ok=True)
         train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True)
@@ -285,9 +281,6 @@ def reconstruction(args):
 
     # save model for future usage
     tensorf.save(f'{logfolder}/{args.expname}.th')
-
-    # extract sigma distribution using fully trained model
-    # extract_sigma_from_scene_box(tensorf)
 
     if args.render_train:
         os.makedirs(f'{logfolder}/imgs_train_all', exist_ok=True)

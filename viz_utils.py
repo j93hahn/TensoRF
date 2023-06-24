@@ -170,7 +170,8 @@ def create_single_sigma_viz(_sigmas, pose: str):
         cbar_location="right", cbar_mode="edge", cbar_size="7%", cbar_pad=0.15,
     )
 
-    h = grid[0].imshow(_sigmas.reshape(800,800))#, cmap='viridis', norm=LogNorm(1e0, 1e2))
+    # (800,800) for blender; (756,1008) for LLFF
+    h = grid[0].imshow(_sigmas.reshape(756,1008))#, cmap='viridis', norm=LogNorm(1e0, 1e2))
     grid[0].set_title(f'Sigma Visualizations at Pose {pose}')
     grid[0].get_xaxis().set_visible(False)
     grid[0].get_yaxis().set_visible(False)

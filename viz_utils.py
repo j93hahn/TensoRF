@@ -178,6 +178,7 @@ def compute_weight_histograms_of_multiple_rays_vectorized(
     percentile: float = 0.5,
 ):
     # weights: N_rays x N_samples
+    # sigmas: N_rays x N_samples
     # xyz_samples: N_rays x N_samples x 3
     _idxs = np.zeros(weights.shape[0], dtype=np.int32)
     _weights = np.zeros(weights.shape[0], dtype=np.float32)
@@ -192,7 +193,7 @@ def compute_weight_histograms_of_multiple_rays_vectorized(
     # if the sum of the weights is 0, the ray passed through empty space; apply a
     # mask to that ray as it will not contribute to the final image
     if np.any(_weights_sum == 0):
-        mask[np.where(_weights_sum == 0)[0]] = True
+        mask[_weights_sum == 0] = True
         if mask.sum() == weights.shape[0]:
             return _idxs, _weights, _sigmas, _xyz_locs
 
@@ -217,10 +218,11 @@ def compute_weight_histograms_of_multiple_rays_vectorized(
     weights_cum = np.cumsum(weights_cum, axis=-1)
 
     # extract the first weight value at the specified percentile of the CDF for each ray
-    _wpercentile = np.apply_along_axis(lambda x: np.where(x >= percentile)[0][0], axis=-1, arr=weights_cum[~mask])
+    weights_cum = (weights_cum >= percentile)
+    _wpercentile = np.argmax(weights_cum, axis=-1) # argmax returns the first index where the condition is met
 
     # store the index, weight, and xyz location of the given ray
-    _idxs[~mask] = _wpercentile
+    _idxs[~mask] = _wpercentile[~mask]
     _weights[~mask] = weights[~mask, _idxs[~mask]]
     _sigmas[~mask] = sigmas[~mask, _idxs[~mask]]
     _xyz_locs[~mask] = xyz_samples[~mask, _idxs[~mask]]

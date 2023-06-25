@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import torch
+import imageio.v2 as imageio
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import AsinhNorm, LogNorm, Normalize
@@ -13,8 +14,8 @@ from dataLoader.ray_utils import get_rays, ndc_rays_blender
 from models.tensoRF import TensorVM, TensorCP, raw2alpha, TensorVMSplit, AlphaGridMask
 from opt import config_parser
 from utils import *
-from viz_utils import OctreeRender_trilinear_fast, compute_weight_histograms_of_multiple_rays, \
-    create_single_sigma_viz
+from viz_utils import OctreeRender_trilinear_fast, compute_weight_histograms_of_multiple_rays_vectorized, \
+    compute_weight_histograms_of_multiple_rays, create_single_sigma_viz
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 renderer = OctreeRender_trilinear_fast
@@ -39,50 +40,44 @@ def generate_sigmas(
         pass
 
     img_eval_interval = 1 if N_vis < 0 else max(test_dataset.all_rays.shape[0] // N_vis,1)
-    idxs = list(range(0, test_dataset.all_rays.shape[0], img_eval_interval))
+    writer = imageio.get_writer(f'sigmas_{Path(os.getcwd()).parts[-1]}.mp4', fps=20)
 
-    if args.render_sigma_test_pose > idxs[-1]:
-        raise ValueError("render_sigma_test_pose must be less than the number of test poses")
+    if args.save_xyz_loc:
+        print("\nSaving xyz locations for future samplings")
+
+    if args.load_xyz_loc:
+        if args.load_xyz_loc_path is None:
+            raise ValueError("Please specify the path to load the xyz locations from")
+        print("\nLoading non-normalized xyz locations from previous samplings")
 
     # render the sigma test pose
     for idx, samples in tqdm(enumerate(test_dataset.all_rays[0::img_eval_interval]), file=sys.stdout):
-        if idx == args.render_sigma_test_pose:
-            if args.save_xyz_loc:
-                print("\nSaving xyz locations for future samplings")
-                rays = samples.view(-1,samples.shape[-1])
-                weight, sigma, xyz_sample = renderer(rays, tensorf, chunk=4096, N_samples=N_samples,
-                                                    ndc_ray=ndc_ray, white_bg=white_bg, device=device)
+        if args.save_xyz_loc:
+            rays = samples.view(-1,samples.shape[-1])
+            _, _sigmas, _xyz_locs = renderer(rays, tensorf, chunk=4096, N_samples=N_samples,
+                                             ndc_ray=ndc_ray, white_bg=white_bg, device=device)
 
-                # compute the weights histogram of the rays
-                _, _, _sigmas, _xyz_locs = compute_weight_histograms_of_multiple_rays(
-                    weight,
-                    sigma,
-                    xyz_sample
-                )
+            # save the xyz locations for future samplings (for the same pose)
+            np.save(f'xyz_locs_pose{idx}.npy', _xyz_locs)
+            np.save(f'sigmas_pose{idx}.npy', _sigmas)
 
-                # save the xyz locations for future samplings (for the same pose)
-                np.save(f'xyz_locs_pose{args.render_sigma_test_pose}.npy', _xyz_locs)
-                np.save(f'sigmas_pose{args.render_sigma_test_pose}.npy', _sigmas)
+            create_single_sigma_viz(_sigmas, idx)
+            writer.append_data(imageio.imread(f'sigmas_pose{idx}.png'))
 
-                create_single_sigma_viz(_sigmas, args.render_sigma_test_pose)
-                return
+        elif args.load_xyz_loc:
+            _xyzs = Path(args.load_xyz_loc_path) / f'xyz_locs_pose{idx}.npy'
+            xyzs = torch.from_numpy(np.load(_xyzs)).to(device)
 
-            elif args.load_xyz_loc:
-                if args.load_xyz_loc_path is None:
-                    raise ValueError("Please specify the path to load the xyz locations from")
+            _sigmas = tensorf.compute_sigma(xyzs)
+            np.save(f'sigmas_pose{idx}.npy', _sigmas)
 
-                print("\nLoading non-normalized xyz locations from previous samplings")
-                _xyzs = Path(args.load_xyz_loc_path) / f'xyz_locs_pose{args.render_sigma_test_pose}.npy'
-                xyzs = torch.from_numpy(np.load(_xyzs)).to(device)
+            create_single_sigma_viz(_sigmas, idx)
+            writer.append_data(imageio.imread(f'sigmas_pose{idx}.png'))
 
-                _sigmas = tensorf.compute_sigma(xyzs)
-                np.save(f'sigmas_pose{args.render_sigma_test_pose}.npy', _sigmas)
+        else:
+            raise ValueError("Please specify either save_xyz_loc or load_xyz_loc")
 
-                create_single_sigma_viz(_sigmas, args.render_sigma_test_pose)
-                return
-
-            else:
-                raise ValueError("Please specify either save_xyz_loc or load_xyz_loc")
+    writer.close()
 
 
 @torch.no_grad()
@@ -116,8 +111,5 @@ if __name__ == "__main__":
 
     args = config_parser()
     print(args)
-
-    if args.render_sigma_test_pose == -1:
-        raise ValueError('Please specify the pose index to render the sigma map from')
 
     render_sigmas_from_test_pose(args)

@@ -175,6 +175,7 @@ def compute_weight_histograms_of_multiple_rays_vectorized(
     weights: np.ndarray,
     sigmas: np.ndarray,
     xyz_samples: np.ndarray,
+    percentile: float = 0.5,
 ):
     # weights: N_rays x N_samples
     # xyz_samples: N_rays x N_samples x 3
@@ -216,7 +217,7 @@ def compute_weight_histograms_of_multiple_rays_vectorized(
     weights_cum = np.cumsum(weights_cum, axis=-1)
 
     # extract the first weight value at the specified percentile of the CDF for each ray
-    _wpercentile = np.apply_along_axis(lambda x: np.where(x >= 0.5)[0][0], axis=-1, arr=weights_cum[~mask])
+    _wpercentile = np.apply_along_axis(lambda x: np.where(x >= percentile)[0][0], axis=-1, arr=weights_cum[~mask])
 
     # store the index, weight, and xyz location of the given ray
     _idxs[~mask] = _wpercentile

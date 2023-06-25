@@ -3,6 +3,7 @@ import numpy as np
 import torch
 
 from mpl_toolkits.axes_grid1 import ImageGrid
+from matplotlib.colors import AsinhNorm, LogNorm, Normalize
 
 
 """
@@ -52,14 +53,18 @@ def OctreeRender_trilinear_fast(rays, tensorf, chunk=4096, N_samples=-1, ndc_ray
 
         _, _, _, weight, sigma, xyz_sample = tensorf(rays_chunk, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, N_samples=N_samples)
 
-        # detach outputs of the model to prevent CUDA OOM errors
-        weights.append(weight.detach().cpu())
-        sigmas.append(sigma.detach().cpu())
-        xyz_samples.append(xyz_sample.detach().cpu())
+        # compute the weights histogram of each ray batch-by-batch to avoid CPU memory issues
+        _, _weights, _sigmas, _xyz_locs = compute_weight_histograms_of_multiple_rays_vectorized(
+            weight.detach().cpu().numpy(),
+            sigma.detach().cpu().numpy(),
+            xyz_sample.detach().cpu().numpy(),
+        )
 
-    # convert all outputs to type np.ndarray
-    return torch.cat(weights).numpy(), torch.cat(sigmas).numpy(), torch.cat(xyz_samples).numpy()
+        weights.append(_weights)
+        sigmas.append(_sigmas)
+        xyz_samples.append(_xyz_locs)
 
+    return np.concatenate(weights), np.concatenate(sigmas), np.concatenate(xyz_samples)
 
 
 """
@@ -101,7 +106,7 @@ def compute_weight_histogram_of_single_ray(
     # random point along the ray
     if weights.sum() == 0:
         idx = np.random.randint(0, weights.shape[0])
-        return idx, weights[idx], sigmas[idx], xyz_samples[idx]
+        return 0, 0, 0, 0
 
     # return the maximum weight if it is >= 50% of the total sum of the weights; this
     # value must divide the weights histogram into two equal parts
@@ -135,9 +140,7 @@ def compute_weight_histogram_of_single_ray(
 """
 compute the weights histogram of multiple rays --
 
-wrapper function that calls compute_weights_histogram_of_single_ray() for each ray in the batch
-
-TODO: not fully vectorized over the entire batch; can be made faster
+non-vectorized wrapper function that calls compute_weights_histogram_of_single_ray() for each ray in the batch
 """
 def compute_weight_histograms_of_multiple_rays(weights, sigmas, xyz_samples):
     # weights: N_rays x N_samples
@@ -163,15 +166,86 @@ def compute_weight_histograms_of_multiple_rays(weights, sigmas, xyz_samples):
     return _idxs, _weights, _sigmas, _xyz_locs
 
 
-def create_single_sigma_viz(_sigmas, pose: str):
+"""
+compute the weights histogram of multiple rays --
+
+vectorized wrapper function that computes the weights histogram of every ray in the batch simultaneously
+"""
+def compute_weight_histograms_of_multiple_rays_vectorized(
+    weights: np.ndarray,
+    sigmas: np.ndarray,
+    xyz_samples: np.ndarray,
+):
+    # weights: N_rays x N_samples
+    # xyz_samples: N_rays x N_samples x 3
+    _idxs = np.zeros(weights.shape[0], dtype=np.int32)
+    _weights = np.zeros(weights.shape[0], dtype=np.float32)
+    _sigmas = np.zeros(weights.shape[0], dtype=np.float32)
+    _xyz_locs = np.zeros((weights.shape[0], 3), dtype=np.float32)
+
+    # mask will store the indices of the rays that have not yet been processed
+    # as false; once a ray has been processed, its index will be set to true
+    mask = np.zeros(weights.shape[0], dtype=bool)
+    _weights_sum = weights.sum(axis=-1)
+
+    # if the sum of the weights is 0, the ray passed through empty space; apply a
+    # mask to that ray as it will not contribute to the final image
+    if np.any(_weights_sum == 0):
+        mask[np.where(_weights_sum == 0)[0]] = True
+        if mask.sum() == weights.shape[0]:
+            return _idxs, _weights, _sigmas, _xyz_locs
+
+    # return the maximum weight if it is >= 50% of the total sum of the weights; this
+    # value must divide the weights histogram into two equal parts
+    np.seterr(divide='ignore', invalid='ignore')    # ignore divide by zero warnings
+    if np.any((weights[~mask].max(axis=-1) / _weights_sum[~mask]) >= 0.5):
+        _wmax = np.nan_to_num(weights.max(axis=-1) / _weights_sum, nan=0.0)
+        _wmax = (_wmax >= 0.5) & (~mask)
+        _idxs[_wmax] = weights.argmax(axis=-1)[_wmax]
+        _weights[_wmax] = weights[_wmax, _idxs[_wmax]]
+        _sigmas[_wmax] = sigmas[_wmax, _idxs[_wmax]]
+        _xyz_locs[_wmax] = xyz_samples[_wmax, _idxs[_wmax]]
+
+        # apply a mask to the rays that have been processed
+        mask[_wmax] = True
+        if mask.sum() == weights.shape[0]:
+            return _idxs, _weights, _sigmas, _xyz_locs
+
+    # normalize the weights of each ray to sum 1 and compute its cumulative distribution function
+    weights_cum = np.nan_to_num(weights / _weights_sum[..., None], nan=0.0)
+    weights_cum = np.cumsum(weights_cum, axis=-1)
+
+    # extract the first weight value at the specified percentile of the CDF for each ray
+    _wpercentile = np.apply_along_axis(lambda x: np.where(x >= 0.5)[0][0], axis=-1, arr=weights_cum[~mask])
+
+    # store the index, weight, and xyz location of the given ray
+    _idxs[~mask] = _wpercentile
+    _weights[~mask] = weights[~mask, _idxs[~mask]]
+    _sigmas[~mask] = sigmas[~mask, _idxs[~mask]]
+    _xyz_locs[~mask] = xyz_samples[~mask, _idxs[~mask]]
+
+    # turn divide by zero warnings back on
+    np.seterr(divide='warn', invalid='warn')
+
+    # return the indices, weights, and xyz locations of the rays
+    return _idxs, _weights, _sigmas, _xyz_locs
+
+
+def create_single_sigma_viz(_sigmas, pose):
     fig = plt.figure(figsize=(5, 6))
     grid = ImageGrid(
         fig, 111, nrows_ncols=(1, 1),
         cbar_location="right", cbar_mode="edge", cbar_size="7%", cbar_pad=0.15,
     )
 
+    lower = 1e-2
+    upper = 1e2
+
+    _sigmas[_sigmas < lower] = lower
+    _sigmas[_sigmas > upper] = upper
+
     # (800,800) for blender; (756,1008) for LLFF
-    h = grid[0].imshow(_sigmas.reshape(756,1008))#, cmap='viridis', norm=LogNorm(1e0, 1e2))
+    h = grid[0].imshow(_sigmas.reshape(800,800), cmap='viridis', norm=LogNorm(lower, upper))
     grid[0].set_title(f'Sigma Visualizations at Pose {pose}')
     grid[0].get_xaxis().set_visible(False)
     grid[0].get_yaxis().set_visible(False)

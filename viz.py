@@ -14,8 +14,7 @@ from dataLoader.ray_utils import get_rays, ndc_rays_blender
 from models.tensoRF import TensorVM, TensorCP, raw2alpha, TensorVMSplit, AlphaGridMask
 from opt import config_parser
 from utils import *
-from viz_utils import OctreeRender_trilinear_fast, compute_weight_histograms_of_multiple_rays_vectorized, \
-    compute_weight_histograms_of_multiple_rays, create_single_sigma_viz
+from viz_utils import OctreeRender_trilinear_fast, create_single_sigma_viz
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 renderer = OctreeRender_trilinear_fast

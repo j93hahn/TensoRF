@@ -17,9 +17,9 @@ def OctreeRender_trilinear_fast(rays, tensorf, chunk=4096, N_samples=-1, ndc_ray
 
         rgbs.append(rgb_map)
         depth_maps.append(depth_map)
-        alphas.append(alpha)
+        # alphas.append(alpha)
 
-    return torch.cat(rgbs), torch.cat(alphas), torch.cat(depth_maps), None, None
+    return torch.cat(rgbs), None, torch.cat(depth_maps), None, None # avoid OOM; don't care about alphas
 
 
 # outdated function - extract sigma values for density visualization in Alpha Invariance

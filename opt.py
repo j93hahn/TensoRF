@@ -102,6 +102,8 @@ def config_parser(cmd=None):
     parser.add_argument('--ndc_ray', type=int, default=0)
     parser.add_argument('--nSamples', type=int, default=1e6,
                         help='sample point each ray, pass 1e6 if automatic adjust')
+    parser.add_argument('--sampling_res_scale', type=float, default=1.0,
+                        help='scale the sampling resolution by this factor')
     parser.add_argument('--step_ratio',type=float,default=0.5)
     parser.add_argument('--render_sigma_test_pose', type=int, default=-1,
                         help='test pose to generate sigma plots from')

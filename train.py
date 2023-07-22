@@ -125,7 +125,7 @@ def reconstruction(args):
     # tensorVM, renderer = init_parameters(args, train_dataset.scene_bbox.to(device), reso_list[0])
     aabb = train_dataset.scene_bbox.to(device)
     reso_cur = N_to_reso(args.N_voxel_init, aabb)
-    nSamples = min(args.nSamples, cal_n_samples(reso_cur,args.step_ratio))
+    nSamples = int(min(args.nSamples, cal_n_samples(reso_cur,args.step_ratio)) * args.sampling_res_scale)
 
 
     if args.ckpt is not None:
@@ -267,7 +267,7 @@ def reconstruction(args):
             if iteration in upsamp_list:
                 n_voxels = N_voxel_list.pop(0)
                 reso_cur = N_to_reso(n_voxels, tensorf.aabb)
-                nSamples = min(args.nSamples, cal_n_samples(reso_cur,args.step_ratio))
+                nSamples = int(min(args.nSamples, cal_n_samples(reso_cur,args.step_ratio)) * args.sampling_res_scale)
                 tensorf.upsample_volume_grid(reso_cur)
 
                 if args.lr_upsample_reset:

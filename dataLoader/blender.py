@@ -27,7 +27,7 @@ class BlenderDataset(Dataset):
 
         self.white_bg = True
         self.near_far = [2.0,6.0]
-        
+
         self.center = torch.mean(self.scene_bbox, axis=0).float().view(1, 1, 3)
         self.radius = (self.scene_bbox[1] - self.center).float().view(1, 1, 3)
         self.downsample=downsample
@@ -35,7 +35,7 @@ class BlenderDataset(Dataset):
     def read_depth(self, filename):
         depth = np.array(read_pfm(filename)[0], dtype=np.float32)  # (800, 800)
         return depth
-    
+
     def read_meta(self):
 
         with open(os.path.join(self.root_dir, f"transforms_{self.split}.json"), 'r') as f:
@@ -71,7 +71,7 @@ class BlenderDataset(Dataset):
             image_path = os.path.join(self.root_dir, f"{frame['file_path']}.png")
             self.image_paths += [image_path]
             img = Image.open(image_path)
-            
+
             if self.downsample!=1.0:
                 img = img.resize(self.img_wh, Image.LANCZOS)
             img = self.transform(img)  # (4, h, w)
@@ -98,14 +98,14 @@ class BlenderDataset(Dataset):
 
     def define_transforms(self):
         self.transform = T.ToTensor()
-        
+
     def define_proj_mat(self):
         self.proj_mat = self.intrinsics.unsqueeze(0) @ torch.inverse(self.poses)[:,:3]
 
     def world2ndc(self,points,lindisp=None):
         device = points.device
         return (points - self.center.to(device)) / self.radius.to(device)
-        
+
     def __len__(self):
         return len(self.all_rgbs)
 
